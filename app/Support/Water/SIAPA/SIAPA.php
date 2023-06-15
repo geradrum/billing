@@ -111,6 +111,10 @@ class SIAPA implements WaterInterface
             return [422, 'Incorrect password'];
         }
 
+        if (! is_null($incorrectPassword) && $incorrectPassword->text() === 'Usuario no registrado') {
+            return [422, 'Incorrect user'];
+        }
+
         $sessionIdentifer = $document->find('#lblTitulo')->toArray();
 
         if (count($sessionIdentifer) === 0) {
