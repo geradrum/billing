@@ -17,13 +17,18 @@ use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'v1'], function () {
 
-    Route::group(['prefix' => 'water'], function () {
+    Route::group(['prefix' => 'billing'], function () {
 
-        Route::post('siapa', [WaterBillingController::class, 'siapaServices']);
-        Route::post('siapa/{id}', [WaterBillingController::class, 'siapaBill']);
+        // Water billing
+        Route::group(['prefix' => 'water'], function () {
 
-        Route::post('sadm', [WaterBillingController::class, 'sadmServices']);
-        Route::post('sadm/{id}', [WaterBillingController::class, 'sadmBill']);
+            Route::post('siapa', [WaterBillingController::class, 'siapaServices']);
+            //Route::post('siapa/{id}', [WaterBillingController::class, 'siapaBill']);
+
+            Route::post('sadm', [WaterBillingController::class, 'sadmServices']);
+            //Route::post('sadm/{id}', [WaterBillingController::class, 'sadmBill']);
+
+        });
 
     });
 

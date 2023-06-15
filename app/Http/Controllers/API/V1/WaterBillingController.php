@@ -5,16 +5,15 @@ namespace App\Http\Controllers\API\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\API\V1\Water\SADMBillsRequest;
 use App\Http\Requests\API\V1\Water\SIAPABillRequest;
-use App\Support\Water\SADM\SADM;
-use App\Support\Water\SIAPA\SIAPA;
-use Illuminate\Http\Request;
+use App\Support\Billing\Water\SADM\SADM;
+use App\Support\Billing\Water\SIAPA\SIAPA;
 
 class WaterBillingController extends Controller
 {
 
     public function siapaServices(SIAPABillRequest $request)
     {
-        return [];
+        return (new SIAPA($request['user'], $request['password']))->getServices();
     }
 
     public function siapaBill(SIAPABillRequest $request)

@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Support\Water\SADM;
+namespace App\Support\Billing\Water\SADM;
 
-use App\Support\Water\WaterInterface;
+use App\Support\Billing\Water\WaterBillInterface;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\FileCookieJar;
 use Illuminate\Support\Facades\Storage;
 use PHPHtmlParser\Dom;
 
-class SADM implements WaterInterface
+class SADM implements WaterBillInterface
 {
 
     protected Client $client;
@@ -17,10 +17,6 @@ class SADM implements WaterInterface
     {
         $this->user = $user;
         $this->password = $password;
-    }
-
-    public function getServices()
-    {
         $cookieJar = new FileCookieJar(
             Storage::disk('local')->path("cookies/water/sadm/{$this->user}.cookies"),
             true
@@ -31,7 +27,10 @@ class SADM implements WaterInterface
             'allow_redirects' => true,
             'http_errors' => false,
         ]);
+    }
 
+    public function getServices()
+    {
         $response = $this->client->request('POST', '/eAyd/autenticacione', [
             'form_params' => [
                 'command'=> '',
@@ -104,5 +103,15 @@ class SADM implements WaterInterface
             $month = strtolower(substr($a->text(), 0 , 3));
             return "{$month}|{$a->href}";
         })->values()->unique();
+    }
+
+    public function login(): void
+    {
+        return ;
+    }
+
+    public function getClient(): Client
+    {
+        return $this->client;
     }
 }
