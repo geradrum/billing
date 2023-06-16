@@ -3,10 +3,25 @@
 namespace App\Support\Billing\Water\SIAPA;
 
 use App\Support\Billing\BaseExtractor;
+use Illuminate\Support\Arr;
+use PHPHtmlParser\Dom\HtmlNode;
 use Psr\Http\Message\ResponseInterface;
 
 class Extractor extends BaseExtractor
 {
+    public static function getAmount(ResponseInterface $response): string
+    {
+        $amount = '0.0';
+        $document = self::parseHtml($response);
+        preg_match('/\$.+$/is', $document->find('#datosCta')->text(), $matches);
+        $amount = preg_replace('/[$,*]/', '', $matches[0]);
+        if (str_ends_with($amount, '-')) {
+            $amount = str_replace('-', '', $amount);
+            $amount = floatval("-$amount");
+        }
+        return $amount;
+    }
+
     /**
      * Get state object.
      *
@@ -16,8 +31,8 @@ class Extractor extends BaseExtractor
     public static function getStateObject(ResponseInterface $response): array
     {
         $state = [];
-        $html = self::parseHtml($response);
-        $inputs = $html->find('input');
+        $document = self::parseHtml($response);
+        $inputs = $document->find('input');
         foreach ($inputs as $input) {
             $state[$input->name] = $input->value;
         }
@@ -25,14 +40,18 @@ class Extractor extends BaseExtractor
     }
 
     /**
-     * Check login status.
+     * Get services array.
      *
      * @param ResponseInterface $response
-     * @return bool
+     * @return array
      */
-    public static function isLoggedIn(ResponseInterface $response): bool
+    public static function getServices(ResponseInterface $response): array
     {
-        return false;
+        $document = self::parseHtml($response);
+        $rows = collect($document->find('table#dgCuentas > tr')->toArray())->forget(0);
+        return $rows->map(function (HtmlNode $row) {
+            return self::parseServiceRow($row);
+        })->values()->toArray();
     }
 
     /**
@@ -73,6 +92,37 @@ class Extractor extends BaseExtractor
         return [
             'status' => 200,
             'message' => 'Logged in',
+        ];
+    }
+
+    /**
+     * Check login status.
+     *
+     * @param ResponseInterface $response
+     * @return bool
+     */
+    public static function isLoggedIn(ResponseInterface $response): bool
+    {
+        return false;
+    }
+
+
+    /**
+     * Parse table row.
+     *
+     * @param HtmlNode $tr
+     * @return array
+     */
+    protected static function parseServiceRow(HtmlNode $tr): array
+    {
+        $tds = collect($tr->find('td > font')->toArray())->slice(0, 3);
+        $tds = $tds->map(function (HtmlNode $td) {
+            return trim($td->text());
+        })->toArray();
+        return [
+            'id' => Arr::get($tds, 0),
+            'names' => Arr::get($tds, 1),
+            'address' => Arr::get($tds, 2),
         ];
     }
 }

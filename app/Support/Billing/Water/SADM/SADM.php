@@ -2,17 +2,47 @@
 
 namespace App\Support\Billing\Water\SADM;
 
+use App\Models\Bill;
+use App\Models\Company;
+use App\Models\Service;
 use App\Support\Billing\Water\WaterBillInterface;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\FileCookieJar;
+use GuzzleHttp\Exception\GuzzleException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
-use PHPHtmlParser\Dom;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class SADM implements WaterBillInterface
 {
+    /**
+     * User.
+     *
+     * @var string
+     */
+    protected string $user;
 
+    /**
+     * Password
+     *
+     * @var string
+     */
+    protected string $password;
+
+    /**
+     * Http client.
+     *
+     * @var Client
+     */
     protected Client $client;
 
+    /**
+     * SADM constructor.
+     *
+     * @param $user
+     * @param $password
+     */
     public function __construct($user, $password)
     {
         $this->user = $user;
@@ -29,87 +59,127 @@ class SADM implements WaterBillInterface
         ]);
     }
 
+    /**
+     * Log in.
+     *
+     * @throws GuzzleException
+     */
+    public function login(): void
+    {
+        $status = Extractor::getSessionStatus(
+            $this->client->request('POST', '/eAyd/autenticacione', [
+                'form_params' => [
+                    'command'=> '',
+                    'email' => $this->user,
+                    'password' => $this->password,
+                ]
+            ])
+        );
+    }
+
+    /**
+     * Get SIAPA active services.
+     *
+     * @throws GuzzleException|ValidationException
+     */
     public function getServices()
     {
-        $response = $this->client->request('POST', '/eAyd/autenticacione', [
-            'form_params' => [
-                'command'=> '',
-                'email' => $this->user,
-                'password' => $this->password,
-            ]
-        ]);
-
-        $services = $this->parseServices($response->getBody()->getContents());
-
+        $this->login();
+        $services = Extractor::getServices($this->client->request('GET', '/eAyd/Inicio.jsp'));
+        $urls = Extractor::getUrls($this->client->request('GET', '/eAyd/Inicio.jsp'));
+        $services = Extractor::mergeServicesAndUrls($services, $urls);
+        $this->registerServices($services);
+        $this->downloadBills($services);
         return $services;
     }
 
-
-
-    public function getBill()
+    /**
+     * Register bill in DB.
+     *
+     * @return void
+     */
+    protected function registerBill($bill, $service): void
     {
-        return null;
+        $serviceModel = Service::firstWhere([
+            'company_id' => Company::firstWhere(['name' => 'SADM'])->id,
+            'contract_number' => $service['id']
+        ]);
+        $month = Arr::get($service, 'last_bill.date');
+        $bill->fill([
+            'service_id' => $serviceModel->id,
+            'month' => "$month-01",
+            'amount' => $service['amount'],
+            'status' => 'pending',
+        ]);
+        $bill->save();
     }
 
-    public function getBills()
+    /**
+     * Register services to DB.
+     *
+     * @param array $services
+     * @return void
+     */
+    protected function registerServices(array $services): void
     {
-
+        foreach ($services as $service) {
+            Service::updateOrCreate([
+                'company_id' => Company::firstWhere(['name' => 'SADM'])->id,
+                'contract_number' => $service['id'],
+            ], [
+                'names' => $service['names'],
+                'address' => $service['address'],
+            ]);
+        }
     }
 
-    protected function parseHtml($html)
+    protected function downloadBill(string $url, string $path, $filename)
     {
-        $dom = new Dom;
-        return $dom->loadStr($html);
+        $pdf = $this->client->request('GET', $url)->getBody()->getContents();
+        if (! Storage::disk('local')->directoryExists($path)) {
+            makeDirectory(Storage::path($path), 0755, true);
+        }
+        Storage::disk('local')->put("/$path/$filename.pdf", $pdf);
+        return "/$path/$filename.pdf";
     }
 
-    protected function parseServices($html)
+    /**
+     * Download bills to storage.
+     *
+     * @param array $services
+     * @return void
+     */
+    protected function downloadBills(array $services): void
     {
-        $dom = $this->parseHtml($html);
-        $trs = collect($dom->find('table#tabla_servicios1 > tbody > tr')->toArray());
-        $trs = $trs->filter(function ($tr, $index) use ($trs) {
-            return !in_array($index, [0, $trs->count() - 1]);
-        });
-        $services = $trs->filter(function ($tr) {
-            return $tr->count() !== 7;
-        })->map(function ($tr) {
-
-            return [
-                'id' => str_replace('&nbsp;', '', $tr->find('td')[1]?->text()),
-                'address' => trim($tr->find('td')[3]?->text()),
-                'cutoff_date' => str_replace('&nbsp;', '', $tr->find('td')[4]?->text()),
-                'amount' => str_replace('&nbsp;', '', $tr->find('td')[5]?->text()),
-                'status' => $tr->find('td')[6]->find('font')[0]?->text(),
-            ];
-        })->values();
-        $urls = $this->parseUrls($html);
-        return $services->map(function ($service) use ($urls) {
-            $url = $urls->first(function ($url) use ($service) {
-                return preg_match("/{$service['id']}/", $url);
-            });
-            $month = substr($url, 0 , 3);
-            $service['bill_url'] = preg_replace('/^[A-Za-z]{3}\|/', '', $url);
-            $service['month'] = $month;
-            return $service;
-        });
-
+        foreach ($services as $service) {
+            $month = Arr::get($service, 'last_bill.date');
+            $serviceModel = Service::firstWhere([
+                'company_id' => Company::firstWhere(['name' => 'SADM'])->id,
+                'contract_number' => $service['id']
+            ]);
+            $bill = Bill::firstWhere([
+                'service_id' => $serviceModel->id,
+                'month' => "$month-01",
+            ]);
+            if (is_null($bill)) {
+                $bill = new Bill;
+                $path = "bills/water/sadm/{$service['id']}";
+                $filename = Str::orderedUuid();
+                $bill->pdf = $this->downloadBill(Arr::get($service, 'last_bill.url'), $path, $filename);
+                $this->registerBill($bill, $service);
+            }
+            $bill->update([
+                'amount' => $service['amount'],
+                'status' => 'pending',
+            ]);
+        }
     }
 
-    protected function parseUrls($html)
-    {
-        $dom = $this->parseHtml($html);
-        return collect($dom->find('a')->toArray())->filter(function ($a) {
-            return preg_match('#^https://ayd\.sadm\.gob\.mx/Solicitudes/solicitudcfdi\?idpdf=#', $a->href);
-        })->map(function ($a) {
-            $month = strtolower(substr($a->text(), 0 , 3));
-            return "{$month}|{$a->href}";
-        })->values()->unique();
-    }
-
-    public function login(): void
-    {
-        return ;
-    }
-
+    /**
+     * Get HTTP client.
+     *
+     * @return Client
+     */
     public function getClient(): Client
     {
         return $this->client;

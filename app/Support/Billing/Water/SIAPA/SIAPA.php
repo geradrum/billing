@@ -2,18 +2,31 @@
 
 namespace App\Support\Billing\Water\SIAPA;
 
+use App\Models\Company;
+use App\Models\Service;
 use App\Support\Billing\Water\WaterBillInterface;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\FileCookieJar;
 use GuzzleHttp\Exception\GuzzleException;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
-use PHPHtmlParser\Dom;
 
 class SIAPA implements WaterBillInterface
 {
+    /**
+     * User.
+     *
+     * @var string
+     */
+    protected string $user;
+
+    /**
+     * Password
+     *
+     * @var string
+     */
+    protected string $password;
 
     /**
      * Http client.
@@ -53,14 +66,15 @@ class SIAPA implements WaterBillInterface
         $state = Extractor::getStateObject(
             $this->client->request('GET', '/RegistroWeb/IngresoSD.aspx')
         );
-        $login = $this->client->request('POST', '/RegistroWeb/IngresoSD.aspx', [
-            'form_params' => [
-                ...$state,
-                'txtUsuario1' => $this->user,
-                'txtContra1' => $this->password,
-            ],
-        ]);
-        $status = Extractor::getSessionStatus($login);
+        $status = Extractor::getSessionStatus(
+            $this->client->request('POST', '/RegistroWeb/IngresoSD.aspx', [
+                'form_params' => [
+                    ...$state,
+                    'txtUsuario1' => $this->user,
+                    'txtContra1' => $this->password,
+                ],
+            ])
+        );
         try {
             $validator = Validator::make($status, [
                 'status' => 'not_in:422,500',
@@ -74,20 +88,48 @@ class SIAPA implements WaterBillInterface
     /**
      * Get SIAPA active services.
      *
-     * @throws GuzzleException
+     * @throws GuzzleException|ValidationException
      */
-    public function getServices(): Response
+    public function getServices(): array
     {
         $this->login();
 
-        $state = Extractor::getStateObject(
+        $services = Extractor::getServices(
             $this->client->request('GET', '/RegistroWeb/webform2.aspx')
         );
 
-        return new Response((string) $this->downloadBill($state), 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="bill.pdf"'
-        ]);
+        foreach ($services as &$service) {
+            $amount = Extractor::getAmount(
+                $this->client->request('GET', '/RegistroWeb/PagarVerif.aspx', [
+                    'query' => [
+                        'pcta' => $service['id'],
+                    ],
+                ])
+            );
+            $service['amount'] = $amount;
+        }
+        // Register
+        $this->registerServices($services);
+        return $services;
+    }
+
+    /**
+     * Register services to DB.
+     *
+     * @param array $services
+     * @return void
+     */
+    protected function registerServices(array $services): void
+    {
+        foreach ($services as $service) {
+            Service::updateOrCreate([
+                'company_id' => Company::firstWhere(['name' => 'SIAPA'])->id,
+                'contract_number' => $service['id'],
+            ], [
+                'names' => $service['names'],
+                'address' => $service['address'],
+            ]);
+        }
     }
 
     /**
@@ -108,6 +150,11 @@ class SIAPA implements WaterBillInterface
         ])->getBody()->getContents();
     }
 
+    /**
+     * Get HTTP client.
+     *
+     * @return Client
+     */
     public function getClient(): Client
     {
         return $this->client;

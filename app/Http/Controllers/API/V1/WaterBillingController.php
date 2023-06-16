@@ -13,7 +13,11 @@ class WaterBillingController extends Controller
 
     public function siapaServices(SIAPABillRequest $request)
     {
-        return (new SIAPA($request['user'], $request['password']))->getServices();
+        $services = (new SIAPA($request['user'], $request['password']))->getServices();
+        // SAVE
+        return response()->json([
+            'data' => $services,
+        ]);
     }
 
     public function siapaBill(SIAPABillRequest $request)
