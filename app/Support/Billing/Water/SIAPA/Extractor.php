@@ -3,9 +3,12 @@
 namespace App\Support\Billing\Water\SIAPA;
 
 use App\Support\Billing\BaseExtractor;
+use Carbon\Carbon;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Storage;
 use PHPHtmlParser\Dom\HtmlNode;
 use Psr\Http\Message\ResponseInterface;
+use Spatie\PdfToText\Pdf;
 
 class Extractor extends BaseExtractor
 {
@@ -20,6 +23,29 @@ class Extractor extends BaseExtractor
             $amount = floatval("-$amount");
         }
         return $amount;
+    }
+
+    /**
+     * Extract data from PDF.
+     *
+     * @param $path
+     * @return array
+     */
+    public static function extractPdfData($path): array
+    {
+        $text = Pdf::getText(
+            Storage::disk('local')->path($path)
+        );
+        $collection = collect(explode(PHP_EOL, $text));
+        $date = $collection->first(function ($line) {
+            return preg_match('/\d{2}\.\d{2}\.\d{4} al \d{2}\.\d{2}\.\d{4}/', $line);
+        });
+        $date = preg_replace('/^\d{2}\.\d{2}\.\d{4} al /', '', $date);
+        $date = Carbon::createFromFormat('d.m.Y', $date)->startOfMonth()->format('Y-m-d');
+        return [
+            'name' => $collection->first(),
+            'date' => $date,
+        ];
     }
 
     /**

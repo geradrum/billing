@@ -96,6 +96,8 @@ class SADM implements WaterBillInterface
     /**
      * Register bill in DB.
      *
+     * @param $bill
+     * @param $service
      * @return void
      */
     protected function registerBill($bill, $service): void
