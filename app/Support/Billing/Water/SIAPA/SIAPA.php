@@ -217,6 +217,10 @@ class SIAPA implements WaterBillInterface
                 'amount' => $service['amount'],
             ]);
         }
+
+        $serviceModel->update([
+            'names' => $service['names'],
+        ]);
     }
 
     /**

@@ -43,7 +43,7 @@ class Extractor extends BaseExtractor
         $date = preg_replace('/^\d{2}\.\d{2}\.\d{4} al /', '', $date);
         $date = Carbon::createFromFormat('d.m.Y', $date)->startOfMonth()->format('Y-m-d');
         return [
-            'name' => $collection->first(),
+            'names' => $collection->first(),
             'date' => $date,
         ];
     }
