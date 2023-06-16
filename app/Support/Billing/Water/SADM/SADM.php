@@ -103,7 +103,7 @@ class SADM implements WaterBillInterface
     protected function registerBill($bill, $service): void
     {
         $serviceModel = Service::firstWhere([
-            'company_id' => Company::firstWhere(['name' => 'SADM'])->id,
+            'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
             'contract_number' => $service['id']
         ]);
         $month = Arr::get($service, 'last_bill.date');
@@ -126,7 +126,7 @@ class SADM implements WaterBillInterface
     {
         foreach ($services as $service) {
             Service::updateOrCreate([
-                'company_id' => Company::firstWhere(['name' => 'SADM'])->id,
+                'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
                 'contract_number' => $service['id'],
             ], [
                 'names' => $service['names'],
@@ -156,7 +156,7 @@ class SADM implements WaterBillInterface
         foreach ($services as $service) {
             $month = Arr::get($service, 'last_bill.date');
             $serviceModel = Service::firstWhere([
-                'company_id' => Company::firstWhere(['name' => 'SADM'])->id,
+                'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
                 'contract_number' => $service['id']
             ]);
             $bill = Bill::firstWhere([

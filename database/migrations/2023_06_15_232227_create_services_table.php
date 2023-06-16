@@ -18,6 +18,11 @@ return new class extends Migration
             $table->string('names')->nullable();
             $table->string('address')->nullable();
             $table->timestamps();
+            $table->foreign('company_id')
+                ->references('id')
+                ->on('companies')
+                ->onUpdate('cascade')
+                ->onDelete('cascade');
         });
     }
 

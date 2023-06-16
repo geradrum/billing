@@ -19,6 +19,11 @@ return new class extends Migration
             $table->enum('status', ['pending', 'paid', 'due']);
             $table->string('pdf');
             $table->timestamps();
+            $table->foreign('service_id')
+                ->references('id')
+                ->on('services')
+                ->onUpdate('cascade')
+                ->onDelete('cascade');
         });
     }
 

@@ -126,7 +126,7 @@ class SIAPA implements WaterBillInterface
     {
         foreach ($services as $service) {
             Service::updateOrCreate([
-                'company_id' => Company::firstWhere(['name' => 'SIAPA'])->id,
+                'company_id' => Company::firstWhere(['name' => 'siapa'])->id,
                 'contract_number' => $service['id'],
             ], [
                 'names' => $service['names'],
@@ -193,7 +193,7 @@ class SIAPA implements WaterBillInterface
     {
         $data = Extractor::extractPdfData($path);
         $serviceModel = Service::firstWhere([
-            'company_id' => Company::firstWhere(['name' => 'SIAPA'])->id,
+            'company_id' => Company::firstWhere(['code' => 'siapa'])->id,
             'contract_number' => $service['id']
         ]);
         $bill = Bill::firstWhere([
@@ -217,10 +217,6 @@ class SIAPA implements WaterBillInterface
                 'amount' => $service['amount'],
             ]);
         }
-
-        $serviceModel->update([
-            'names' => $service['names'],
-        ]);
     }
 
     /**
