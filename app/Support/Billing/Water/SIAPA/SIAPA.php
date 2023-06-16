@@ -126,7 +126,7 @@ class SIAPA implements WaterBillInterface
     {
         foreach ($services as $service) {
             Service::updateOrCreate([
-                'company_id' => Company::firstWhere(['name' => 'siapa'])->id,
+                'company_id' => Company::firstWhere(['code' => 'siapa'])->id,
                 'contract_number' => $service['id'],
             ], [
                 'names' => $service['names'],
