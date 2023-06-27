@@ -4,6 +4,7 @@ namespace App\Support\Billing\Water\SIAPA;
 
 use App\Models\Bill;
 use App\Models\Company;
+use App\Models\Credentials;
 use App\Models\Service;
 use App\Support\Billing\Water\WaterBillInterface;
 use GuzzleHttp\Client;
@@ -17,18 +18,11 @@ use Illuminate\Validation\ValidationException;
 class SIAPA implements WaterBillInterface
 {
     /**
-     * User.
+     * Credentials.
      *
-     * @var string
+     * @var Credentials
      */
-    protected string $user;
-
-    /**
-     * Password
-     *
-     * @var string
-     */
-    protected string $password;
+    protected Credentials $credentials;
 
     /**
      * Http client.
@@ -45,12 +39,16 @@ class SIAPA implements WaterBillInterface
      */
     public function __construct($user, $password)
     {
-        $this->user = $user;
-        $this->password = $password;
+        $this->credentials = Credentials::updateOrCreate([
+            'user' => $user,
+            'company_id' => Company::firstWhere(['code' => 'siapa'])->id,
+        ], [
+            'password' => $password
+        ]);
         $this->client = new Client([
             'base_uri' => config('water.siapa.uri'),
             'cookies' => new FileCookieJar(
-                Storage::disk('local')->path("cookies/water/siapa/{$this->user}.cookies"),
+                Storage::disk('local')->path("cookies/water/siapa/{$this->credentials->user}.cookies"),
                 true
             ),
             'allow_redirects' => true,
@@ -72,8 +70,8 @@ class SIAPA implements WaterBillInterface
             $this->client->request('POST', '/RegistroWeb/IngresoSD.aspx', [
                 'form_params' => [
                     ...$state,
-                    'txtUsuario1' => $this->user,
-                    'txtContra1' => $this->password,
+                    'txtUsuario1' => $this->credentials->user,
+                    'txtContra1' => $this->credentials->password,
                 ],
             ])
         );
@@ -127,6 +125,7 @@ class SIAPA implements WaterBillInterface
         foreach ($services as $service) {
             Service::updateOrCreate([
                 'company_id' => Company::firstWhere(['code' => 'siapa'])->id,
+                'credentials_id' => $this->credentials->id,
                 'contract_number' => $service['id'],
             ], [
                 'names' => $service['names'],
@@ -194,7 +193,8 @@ class SIAPA implements WaterBillInterface
         $data = Extractor::extractPdfData($path);
         $serviceModel = Service::firstWhere([
             'company_id' => Company::firstWhere(['code' => 'siapa'])->id,
-            'contract_number' => $service['id']
+            'contract_number' => $service['id'],
+            'credentials_id' => $this->credentials->id,
         ]);
         $bill = Bill::firstWhere([
             'service_id' => $serviceModel->id,

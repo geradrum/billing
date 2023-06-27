@@ -14,10 +14,16 @@ return new class extends Migration
         Schema::create('services', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('company_id')->index();
+            $table->uuid('credentials_id')->index();
             $table->string('contract_number')->index();
             $table->string('names')->nullable();
             $table->string('address')->nullable();
             $table->timestamps();
+            $table->foreign('credentials_id')
+                ->references('id')
+                ->on('credentials')
+                ->onUpdate('cascade')
+                ->onDelete('cascade');
             $table->foreign('company_id')
                 ->references('id')
                 ->on('companies')

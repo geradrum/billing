@@ -4,6 +4,7 @@ namespace App\Support\Billing\Water\SADM;
 
 use App\Models\Bill;
 use App\Models\Company;
+use App\Models\Credentials;
 use App\Models\Service;
 use App\Support\Billing\Water\WaterBillInterface;
 use GuzzleHttp\Client;
@@ -19,16 +20,9 @@ class SADM implements WaterBillInterface
     /**
      * User.
      *
-     * @var string
+     * @var Credentials
      */
-    protected string $user;
-
-    /**
-     * Password
-     *
-     * @var string
-     */
-    protected string $password;
+    protected Credentials $credentials;
 
     /**
      * Http client.
@@ -45,10 +39,14 @@ class SADM implements WaterBillInterface
      */
     public function __construct($user, $password)
     {
-        $this->user = $user;
-        $this->password = $password;
+        $this->credentials = Credentials::updateOrCreate([
+            'user' => $user,
+            'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
+        ], [
+            'password' => $password
+        ]);
         $cookieJar = new FileCookieJar(
-            Storage::disk('local')->path("cookies/water/sadm/{$this->user}.cookies"),
+            Storage::disk('local')->path("cookies/water/sadm/{$this->credentials->user}.cookies"),
             true
         );
         $this->client = new Client([
@@ -70,8 +68,8 @@ class SADM implements WaterBillInterface
             $this->client->request('POST', '/eAyd/autenticacione', [
                 'form_params' => [
                     'command'=> '',
-                    'email' => $this->user,
-                    'password' => $this->password,
+                    'email' => $this->credentials->user,
+                    'password' => $this->credentials->password,
                 ]
             ])
         );
@@ -104,7 +102,8 @@ class SADM implements WaterBillInterface
     {
         $serviceModel = Service::firstWhere([
             'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
-            'contract_number' => $service['id']
+            'contract_number' => $service['id'],
+            'credentials_id' => $this->credentials->id,
         ]);
         $month = Arr::get($service, 'last_bill.date');
         $bill->fill([
@@ -128,6 +127,7 @@ class SADM implements WaterBillInterface
             Service::updateOrCreate([
                 'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
                 'contract_number' => $service['id'],
+                'credentials_id' => $this->credentials->id,
             ], [
                 'names' => $service['names'],
                 'address' => $service['address'],
@@ -157,7 +157,8 @@ class SADM implements WaterBillInterface
             $month = Arr::get($service, 'last_bill.date');
             $serviceModel = Service::firstWhere([
                 'company_id' => Company::firstWhere(['code' => 'sadm'])->id,
-                'contract_number' => $service['id']
+                'contract_number' => $service['id'],
+                'credentials_id' => $this->credentials->id,
             ]);
             $bill = Bill::firstWhere([
                 'service_id' => $serviceModel->id,
